@@ -3,20 +3,24 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { BookingsController } from './bookings.controller';
 import { BookingsService } from './bookings.service';
 import { Booking, BookingSchema } from './schemas/booking.schema';
-import { LogsModule } from '../logs/logs.module';
-
-// 1. นำเข้า Room กับ RoomSchema (เช็ค path ให้ตรงกับโฟลเดอร์ rooms ของคุณนะครับ)
 import { Room, RoomSchema } from '../rooms/schemas/room.schema';
+import { User, UserSchema } from '../users/schemas/user.schema'; 
+import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: Booking.name, schema: BookingSchema },
-      { name: Room.name, schema: RoomSchema } // <--- 2. จดทะเบียน RoomModel ให้ตึก Bookings รู้จัก
+      { name: Room.name, schema: RoomSchema },
+      // 💡 แนะนำ: ใช้ User.name แทนการพิมพ์ 'User' แบบ string 
+      // เพื่อความปลอดภัยในการอ้างอิงชื่อ Model
+      { name: User.name, schema: UserSchema }, 
     ]),
-    LogsModule,
+    AuditLogsModule, // นำเข้าโมดูลบันทึก Log
   ],
   controllers: [BookingsController],
   providers: [BookingsService],
+  // 💡 ส่งออกเพื่อให้โมดูลอื่น (เช่น Rooms) เรียกใช้ตรวจสอบสถานะการจองได้
+  exports: [BookingsService], 
 })
 export class BookingsModule {}

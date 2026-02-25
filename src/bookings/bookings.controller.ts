@@ -1,20 +1,34 @@
-// 1. เพิ่ม UseInterceptors เข้าไปในวงเล็บนี้ครับ
-import { Controller, Get, Post, Body, Patch, Param, Query, UseInterceptors } from '@nestjs/common'; 
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Query,
+  UseGuards,
+  Req,
+} from '@nestjs/common';
 import { BookingsService } from './bookings.service';
-import { CreateBookingDto } from './dto/create-booking.dto'; 
-// 2. นำเข้าไฟล์ Interceptor ที่เราเขียนไว้ (เช็ค path ให้ตรงกับโฟลเดอร์คุณนะครับ)
-import { LoggingInterceptor } from '../logs/logging.interceptor'; 
+import { CreateBookingDto } from './dto/create-booking.dto';
+import { AccessTokenGuard } from '../common/guards/access-token.guard';
+import { Request } from 'express'; // 👈 นำเข้า Request จาก express เพื่อความแม่นยำ
 
 @Controller('bookings')
-@UseInterceptors(LoggingInterceptor) // <--- 3. แปะยันต์เปิดกล้องวงจรปิดคุมทั้ง Controller ตรงนี้เลย!
+@UseGuards(AccessTokenGuard)
 export class BookingsController {
   constructor(private readonly bookingsService: BookingsService) {}
 
+  // 1. จองห้องประชุม
   @Post()
-  async create(@Body() createBookingDto: CreateBookingDto) { 
-    return this.bookingsService.create(createBookingDto);
+  async create(
+    @Body() createBookingDto: CreateBookingDto,
+    @Req() req: any, // req.user จะถูกแนบมาโดย AccessTokenGuard
+  ) {
+    return this.bookingsService.create(createBookingDto, req.user);
   }
 
+  // 2. ดูประวัติการจอง (กรองตาม roomId หรือ date ได้)
   @Get()
   async findAll(
     @Query('roomId') roomId?: string,
@@ -23,8 +37,10 @@ export class BookingsController {
     return this.bookingsService.findAll(roomId, date);
   }
 
+  // 3. ยกเลิกการจอง
   @Patch(':id/cancel')
-  async cancel(@Param('id') id: string) {
-    return this.bookingsService.cancelBooking(id);
+  async cancel(@Param('id') id: string, @Req() req: any) {
+    // Logic ใน Service จะเช็คความเป็นเจ้าของให้เอง
+    return this.bookingsService.cancelBooking(id, req.user);
   }
 }

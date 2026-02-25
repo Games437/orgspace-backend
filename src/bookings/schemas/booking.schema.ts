@@ -4,31 +4,37 @@ import { Document, Types } from 'mongoose';
 
 export type BookingDocument = Booking & Document;
 
-@Schema({ timestamps: true }) // คำสั่งนี้จะสร้าง createdAt และ updatedAt ให้เราอัตโนมัติ (มีประโยชน์มากเวลาทำ Log)
+@Schema({ timestamps: true })
 export class Booking {
-  // รหัสห้องประชุม (เดี๋ยวเราจะเอาไปเชื่อมกับ Room Schema)
-  @Prop({ type: Types.ObjectId, ref: 'Room', required: true })
+  // 🏢 เชื่อมกับ Room (เพิ่ม index เพื่อให้เช็คห้องว่างได้เร็วขึ้น)
+  @Prop({ type: Types.ObjectId, ref: 'Room', required: true, index: true })
   roomId: Types.ObjectId;
 
-  // รหัสพนักงานที่ทำการจอง (ต้องรอเชื่อมกับงานของเพื่อนที่ทำระบบ User)
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
+  // 👤 เชื่อมกับ User (เพิ่ม index เพื่อให้ดึงประวัติการจองของคนคนนั้นได้ไว)
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
   userId: Types.ObjectId;
 
-  // หัวข้อการประชุม
   @Prop({ required: true })
-  title: string;
+  title: string; // 👈 อย่าลืมเพิ่มฟิลด์หัวข้อการประชุมด้วยนะครับ (ใน Service มีการเรียกใช้ savedBooking.title)
 
-  // เวลาเริ่มประชุม
-  @Prop({ required: true })
+  // ⏰ เวลาเริ่ม (เพิ่ม index เพื่อใช้เปรียบเทียบช่วงเวลา)
+  @Prop({ required: true, index: true })
   startTime: Date;
 
-  // เวลาเลิกประชุม
-  @Prop({ required: true })
+  // ⏰ เวลาเลิก
+  @Prop({ required: true, index: true })
   endTime: Date;
 
-  // สถานะการจอง (รออนุมัติ, อนุมัติแล้ว, ยกเลิก)
-  @Prop({ default: 'APPROVED', enum: ['PENDING', 'APPROVED', 'CANCELLED'] })
+  // 🚦 สถานะ (APPROVED เป็นค่าเริ่มต้นตามที่คุณต้องการ)
+  @Prop({
+    default: 'APPROVED',
+    enum: ['PENDING', 'APPROVED', 'CANCELLED', 'COMPLETED'],
+    index: true,
+  })
   status: string;
 }
 
 export const BookingSchema = SchemaFactory.createForClass(Booking);
+
+// 💡 เทคนิคพิเศษ: ทำ Compound Index เพื่อกันจองซ้ำซ้อนในระดับ Database (ถ้าต้องการความชัวร์ 100%)
+// BookingSchema.index({ roomId: 1, startTime: 1, endTime: 1 });

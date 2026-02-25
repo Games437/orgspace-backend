@@ -1,18 +1,29 @@
-// 1. เพิ่ม UseInterceptors ตรงนี้
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseInterceptors } from '@nestjs/common'; 
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch, // 👈 เปลี่ยนจาก Put เป็น Patch
+  Param,
+  Delete,
+  UseGuards,
+  Req,
+  Query, // 👈 เพิ่ม Query สำหรับค้นหาห้องว่าง
+} from '@nestjs/common';
 import { RoomsService } from './rooms.service';
 import { CreateRoomDto } from './dto/create-room.dto';
-// 2. นำเข้าไฟล์ Interceptor ของเรา (เช็ค path ให้ตรงด้วยนะครับ)
-import { LoggingInterceptor } from '../logs/logging.interceptor'; 
+import { AccessTokenGuard } from '../common/guards/access-token.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '../common/enums/role.enum';
 
 @Controller('rooms')
-@UseInterceptors(LoggingInterceptor) // <--- 3. แปะยันต์เปิดกล้องวงจรปิดคุมตึก Rooms!
-// บรรทัดนี้คือจุดที่ผิดครับ ต้องใส่ export ไว้ข้างหน้า class เสมอ
-export class RoomsController { 
+@UseGuards(AccessTokenGuard, RolesGuard)
+export class RoomsController {
   constructor(private readonly roomsService: RoomsService) {}
 
-  // 1. ค้นหาห้องว่าง (วางไว้ก่อน :id)
-  @Get('available/search')
+  // 1. ค้นหาห้องที่ว่าง (ต้องวางไว้ก่อน :id ไม่งั้นจะโดนตีเป็น id = 'available')
+  @Get('available')
   async findAvailable(
     @Query('startTime') startTime: string,
     @Query('endTime') endTime: string,
@@ -20,28 +31,40 @@ export class RoomsController {
     return this.roomsService.findAvailableRooms(startTime, endTime);
   }
 
+  // 2. สร้างห้องใหม่ (ADMIN Only)
   @Post()
-  async create(@Body() createRoomDto: CreateRoomDto) {
-    return this.roomsService.create(createRoomDto);
+  @Roles(Role.ADMIN)
+  async create(@Body() createRoomDto: CreateRoomDto, @Req() req: any) {
+    return this.roomsService.create(createRoomDto, req.user);
   }
 
+  // 3. ดูห้องทั้งหมด
   @Get()
-  async findAll() {
+  findAll() {
     return this.roomsService.findAll();
   }
 
+  // 4. ดูรายละเอียดห้องเดียว
   @Get(':id')
-  async findOne(@Param('id') id: string) {
+  findOne(@Param('id') id: string) {
     return this.roomsService.findOne(id);
   }
 
-  @Patch(':id')
-  async update(@Param('id') id: string, @Body() updateData: any) {
-    return this.roomsService.update(id, updateData);
+  // 5. แก้ไขข้อมูลห้อง (ADMIN Only)
+  @Patch(':id') // 👈 ใช้ Patch แทน Put สำหรับ Partial Update
+  @Roles(Role.ADMIN)
+  async update(
+    @Param('id') id: string,
+    @Body() updateData: any,
+    @Req() req: any,
+  ) {
+    return this.roomsService.update(id, updateData, req.user);
   }
 
+  // 6. ลบห้อง (ADMIN Only)
   @Delete(':id')
-  async remove(@Param('id') id: string) {
-    return this.roomsService.remove(id);
+  @Roles(Role.ADMIN)
+  async remove(@Param('id') id: string, @Req() req: any) {
+    return this.roomsService.remove(id, req.user);
   }
 }

@@ -1,4 +1,11 @@
-import { IsString, IsNotEmpty, IsNumber, IsArray, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsNumber,
+  IsArray,
+  IsOptional,
+  Min,
+} from 'class-validator';
 
 export class CreateRoomDto {
   @IsString()
@@ -7,9 +14,15 @@ export class CreateRoomDto {
 
   @IsNumber()
   @IsNotEmpty({ message: 'กรุณาระบุความจุ' })
+  @Min(1)
   capacity: number;
 
   @IsArray()
   @IsOptional()
   facilities?: string[];
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  bufferTime?: number;
 }
