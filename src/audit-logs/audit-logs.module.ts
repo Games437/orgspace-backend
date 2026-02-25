@@ -1,14 +1,14 @@
 import { Module, Global } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { AuditLogsController } from './audit-logs.controller';
 import { AuditLog, AuditLogSchema } from './schemas/audit-log.schema';
 import { AuditLogsService } from './audit-logs.service';
 
 @Global() // 👈 ใส่ Global เพื่อให้ทุก Module ในโปรเจกต์เรียกใช้ได้ทันที
 @Module({
-  imports: [
-    MongooseModule.forFeature([{ name: AuditLog.name, schema: AuditLogSchema }]),
-  ],
+  imports: [MongooseModule.forFeature([{ name: 'AuditLog', schema: AuditLogSchema }])],
+  controllers: [AuditLogsController], // 👈 เพิ่มบรรทัดนี้
   providers: [AuditLogsService],
-  exports: [AuditLogsService], // 👈 ต้องส่งออก Service ไปให้คนอื่นใช้
+  exports: [AuditLogsService],
 })
 export class AuditLogsModule {}

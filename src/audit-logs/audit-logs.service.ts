@@ -7,11 +7,16 @@ import { AuditLog, AuditLogDocument } from './schemas/audit-log.schema';
 export class AuditLogsService {
   constructor(
     @InjectModel(AuditLog.name) private auditLogModel: Model<AuditLogDocument>,
-  ) {}
+  ) { }
 
   async log(data: any) {
     const newLog = new this.auditLogModel(data);
     return newLog.save();
+  }
+
+  async findAll() { 
+    // ดึง Log ทั้งหมด และเรียงจากใหม่สุดไปเก่าสุด
+    return this.auditLogModel.find().sort({ createdAt: -1 }).exec();
   }
 
   async getLogs() {
