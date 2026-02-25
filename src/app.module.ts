@@ -9,6 +9,12 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { DepartmentsModule } from './departments/departments.module';
+import { PcSpecModule } from './pc-spec/pc-spec.module';
+
+// 1. นำเข้า Module 3 ตัวใหม่จากโปรเจคเก่าของเรา
+import { RoomsModule } from './rooms/rooms.module';
+import { BookingsModule } from './bookings/bookings.module';
+import { LogsModule } from './logs/logs.module';
 
 @Module({
   imports: [
@@ -33,6 +39,12 @@ import { DepartmentsModule } from './departments/departments.module';
     AuthModule,
     DepartmentsModule,
     AuditLogsModule,
+    PcSpecModule,
+    
+    // 2. ใส่ Module ของเราลงไปตรงนี้ (ลบ BookingLogModule ออกแล้ว)
+    RoomsModule,
+    BookingsModule,
+    LogsModule,
   ],
   // controllers: [AppController],  ตัดออกไม่ได้ใช้
 
