@@ -12,7 +12,6 @@ import {
 import { BookingsService } from './bookings.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { AccessTokenGuard } from '../common/guards/access-token.guard';
-import { Request } from 'express'; // 👈 นำเข้า Request จาก express เพื่อความแม่นยำ
 
 @Controller('bookings')
 @UseGuards(AccessTokenGuard)
@@ -31,10 +30,12 @@ export class BookingsController {
   // 2. ดูประวัติการจอง (กรองตาม roomId หรือ date ได้)
   @Get()
   async findAll(
-    @Query('roomId') roomId?: string,
-    @Query('date') date?: string,
+    @Req() req: any, // เปลี่ยนจาก @CurrentUser() เป็น @Request()
+    @Query('roomId') roomId: string,
+    @Query('date') date: string,
   ) {
-    return this.bookingsService.findAll(roomId, date);
+    const user = req.user; // ดึง user ออกจาก request
+    return this.bookingsService.findAll(user, roomId, date);
   }
 
   // 3. ยกเลิกการจอง

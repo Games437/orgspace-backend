@@ -20,25 +20,16 @@ export class BookingsService {
     @InjectModel(Room.name) private roomModel: Model<RoomDocument>,
     @InjectModel('User') private userModel: Model<any>,
     private readonly auditLogsService: AuditLogsService,
-  ) {}
+  ) { }
 
   @Cron(CronExpression.EVERY_10_MINUTES)
   async handleAutoArchive() {
     const now = new Date();
-
     console.log(`[Cron Job] Checking for expired bookings at ${now.toISOString()}`);
 
-    // ค้นหาการจองที่:
-    // 1. สถานะยังเป็น APPROVED
-    // 2. เวลา endTime ผ่านมาแล้ว (น้อยกว่าเวลาปัจจุบัน)
     const result = await this.bookingModel.updateMany(
-      {
-        status: 'APPROVED',
-        endTime: { $lt: now },
-      },
-      {
-        $set: { status: 'COMPLETED' },
-      },
+      { status: 'APPROVED', endTime: { $lt: now } },
+      { $set: { status: 'COMPLETED' } },
     );
 
     if (result.modifiedCount > 0) {
@@ -46,32 +37,23 @@ export class BookingsService {
     }
   }
 
-  // 1. สร้างการจอง (รองรับ roomName)
   async create(createBookingDto: CreateBookingDto, currentUser: any) {
     const { roomName, startTime, endTime, title } = createBookingDto;
     const start = new Date(startTime);
     const end = new Date(endTime);
 
-    // 🛡️ เช็คความถูกต้องของเวลา
-    if (start >= end) {
-      throw new BadRequestException('เวลาเริ่มจองต้องอยู่ก่อนเวลาสิ้นสุด');
-    }
-    if (start < new Date()) {
-      throw new BadRequestException('ไม่สามารถจองห้องย้อนหลังได้');
-    }
+    if (start >= end) throw new BadRequestException('เวลาเริ่มจองต้องอยู่ก่อนเวลาสิ้นสุด');
+    if (start < new Date()) throw new BadRequestException('ไม่สามารถจองห้องย้อนหลังได้');
 
-    // 🔍 1. ค้นหาห้องจาก "ชื่อห้อง" (ใช้ RegExp เพื่อให้ไม่ซีเรียสเรื่องตัวพิมพ์เล็ก/ใหญ่)
     const room = await this.roomModel.findOne({
       name: { $regex: new RegExp(`^${roomName}$`, 'i') },
       isActive: true,
     });
 
-    if (!room) {
-      throw new NotFoundException(`ไม่พบห้องชื่อ "${roomName}" หรือห้องถูกปิดใช้งานแล้ว`);
-    }
+    if (!room) throw new NotFoundException(`ไม่พบห้องชื่อ "${roomName}" หรือห้องถูกปิดใช้งานแล้ว`);
+
     const bufferMs = (room.bufferTime || 0) * 60 * 1000;
 
-    // 🛡️ 2. Overlap Check: ป้องกันจองซ้ำ (ใช้ room._id ที่หาเจอ)
     const overlappingBooking = await this.bookingModel.findOne({
       roomId: room._id,
       status: { $ne: 'CANCELLED' },
@@ -84,30 +66,25 @@ export class BookingsService {
     });
 
     if (overlappingBooking) {
-      // คำนวณเวลาที่ห้องจะว่างจริงๆ เพื่อแจ้ง User
       const actualAvailableTime = new Date(overlappingBooking.endTime.getTime() + bufferMs);
       throw new BadRequestException(
         `ห้อง ${roomName} ไม่ว่างในช่วงเวลานี้ เนื่องจากต้องเว้นระยะพักห้อง ${room.bufferTime} นาที (ห้องจะว่างเวลา ${actualAvailableTime.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.)`,
       );
     }
 
-    // 💾 3. บันทึกข้อมูล (เปลี่ยนจาก roomName เป็น roomId เพื่อเก็บลง DB)
     const newBooking = new this.bookingModel({
       ...createBookingDto,
-      roomId: room._id, // บันทึกเป็น ID ตาม Schema
+      roomId: room._id,
       userId: currentUser.id || currentUser.sub,
       status: 'APPROVED',
     });
 
     let savedBooking = await newBooking.save();
-    
-    // Populate ข้อมูลก่อนส่งกลับ
     savedBooking = await savedBooking.populate([
       { path: 'roomId', select: 'name' },
       { path: 'userId', select: 'full_name' },
     ]);
 
-    // 🚀 4. บันทึก Audit Log
     await this.logAction(
       currentUser,
       AuditAction.CREATE_BOOKING,
@@ -120,13 +97,19 @@ export class BookingsService {
     return savedBooking;
   }
 
-  // 2. ค้นหาประวัติการจอง
-  async findAll(roomId?: string, date?: string) {
+  // 2. ค้นหาประวัติการจอง (แก้ไข: กรองตามสิทธิ์)
+  async findAll(currentUser: any, roomId?: string, date?: string) {
     const filter: any = {};
+
+    // 🛡️ ถ้าไม่ใช่ ADMIN ให้เห็นเฉพาะการจองที่ userId ตรงกับตัวเอง
+    if (currentUser.role !== 'ADMIN') {
+      filter.userId = currentUser.id || currentUser.sub;
+    }
+
     if (roomId && Types.ObjectId.isValid(roomId)) {
       filter.roomId = new Types.ObjectId(roomId);
     }
-    
+
     if (date) {
       const startOfDay = new Date(date);
       startOfDay.setHours(0, 0, 0, 0);
@@ -143,15 +126,17 @@ export class BookingsService {
       .exec();
   }
 
-  // 3. ยกเลิกการจอง
+  // 3. ยกเลิกการจอง (แก้ไข: เช็คสิทธิ์เจ้าของ)
   async cancelBooking(id: string, currentUser: any) {
     if (!Types.ObjectId.isValid(id)) throw new BadRequestException('รหัสการจองไม่ถูกต้อง');
-    
+
     const booking = await this.bookingModel.findById(id);
     if (!booking) throw new NotFoundException('ไม่พบรายการจอง');
 
     const actorId = currentUser.id || currentUser.sub;
-    if (currentUser.role !== 'ADMIN' && booking.userId.toString() !== actorId) {
+
+    // 🛡️ กฎเหล็ก: ถ้าไม่ใช่ ADMIN และไม่ใช่เจ้าของ (userId ไม่ตรงกัน) ห้ามลบ
+    if (currentUser.role !== 'ADMIN' && booking.userId.toString() !== actorId.toString()) {
       throw new ForbiddenException('คุณไม่มีสิทธิ์ยกเลิกการจองของผู้อื่น');
     }
 
@@ -175,18 +160,9 @@ export class BookingsService {
     return result;
   }
 
-  // 4. ฟังก์ชันช่วยบันทึก Audit Log
-  private async logAction(
-    currentUser: any,
-    action: AuditAction,
-    targetId: string,
-    details: string,
-    oldValue: any,
-    newValue: any,
-  ) {
+  private async logAction(currentUser: any, action: AuditAction, targetId: string, details: string, oldValue: any, newValue: any) {
     const actorId = currentUser.id || currentUser.sub;
     let actor: any = null;
-
     if (Types.ObjectId.isValid(actorId)) {
       actor = await this.userModel.findById(actorId).exec();
     }
