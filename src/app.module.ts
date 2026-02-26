@@ -4,27 +4,31 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
-import { AuditLogsModule } from './audit-logs/audit-logs.module';
-import { UsersModule } from './users/users.module';
+import { ScheduleModule } from '@nestjs/schedule';
+
+// Internal Modules
 import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
 import { DepartmentsModule } from './departments/departments.module';
 import { RoomsModule } from './rooms/rooms.module';
 import { BookingsModule } from './bookings/bookings.module';
-import { ScheduleModule } from '@nestjs/schedule';
+import { AuditLogsModule } from './audit-logs/audit-logs.module';
 
 @Module({
   imports: [
+    // Core & Configuration
     ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    // ตั้งค่า rate limiting โดยใช้ ThrottlerModule
+    // ตั้งค่า rate limiting โดยใช้ ThrottlerModule 100 requests ต่อนาที (60_000 ms = 1 นาที)
     ThrottlerModule.forRoot([
       {
-        ttl: 60_000, // 1 minute
-        limit: 100, // 100 requests per minute
+        ttl: 60_000,
+        limit: 100,
       },
     ]),
+    // Database Connection
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -32,21 +36,16 @@ import { ScheduleModule } from '@nestjs/schedule';
         uri: configService.get<string>('MONGO_URI'),
       }),
     }),
+    // Business Modules
     UsersModule,
     AuthModule,
     DepartmentsModule,
     AuditLogsModule,
-    // 2. ใส่ Module ของเราลงไปตรงนี้ (ลบ BookingLogModule ออกแล้ว)
     RoomsModule,
     BookingsModule,
   ],
-  // controllers: [AppController],  ตัดออกไม่ได้ใช้
 
   // *** สำหรับการตั้งค่า global guard กรณีกันโดนยิง API รัว ๆ ทั้งระบบ ThrottlerGuard ***
-  providers: [
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
-    //Global RolesGuard สำหรับการตรวจสอบสิทธิ์การเข้าถึง API ทั้งระบบ (ถ้ามีการใช้ @Roles() ใน controller)
-    //{ provide: APP_GUARD, useClass: RolesGuard },
-  ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

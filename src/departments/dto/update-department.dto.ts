@@ -1,6 +1,6 @@
 import { PartialType } from '@nestjs/mapped-types';
 import { CreateDepartmentDto } from './create-department.dto';
 
-// PartialType จะทำให้ name และ description กลายเป็นฟิลด์ที่ไม่บังคับ (Optional)
-// แต่ถ้าส่งมา ก็ยังต้องผ่านกฎ @IsString และ @MinLength เหมือนเดิม
+/* PartialType จะแปลงทุก Property ใน CreateDepartmentDto ให้เป็น Optional (?) *
+ * แต่ยังคงรักษา Validation Decorators (เช่น @IsString, @MinLength) เอาไว้ทั้งหมด */
 export class UpdateDepartmentDto extends PartialType(CreateDepartmentDto) {}

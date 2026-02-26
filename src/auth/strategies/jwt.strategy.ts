@@ -23,7 +23,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
   validate(payload: JwtPayload) {
     return {
-      id: payload.sub, // 👈 แปลงชื่อให้ชัด
+      id: payload.sub,
       role: payload.role,
       department: payload.department,
     };

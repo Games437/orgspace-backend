@@ -7,23 +7,25 @@ import { AuditLog, AuditLogDocument } from './schemas/audit-log.schema';
 export class AuditLogsService {
   constructor(
     @InjectModel(AuditLog.name) private auditLogModel: Model<AuditLogDocument>,
-  ) { }
+  ) {}
 
+  // ฟังก์ชันสำหรับบันทึก Log ใหม่
   async log(data: any) {
     const newLog = new this.auditLogModel(data);
     return newLog.save();
   }
 
-  async findAll() { 
+  // ฟังก์ชันสำหรับดึง Log ทั้งหมด (เรียงจากใหม่สุดไปเก่าสุด)
+  async findAll() {
     // ดึง Log ทั้งหมด และเรียงจากใหม่สุดไปเก่าสุด
     return this.auditLogModel.find().sort({ createdAt: -1 }).exec();
   }
 
+  // ฟังก์ชันสำหรับดึง Log ทั้งหมด พร้อมข้อมูลผู้ใช้ที่เกี่ยวข้อง
   async getLogs() {
-    // 1. เพิ่ม .populate ตรงนี้เพื่อดึงข้อมูลจากตาราง User มาใส่ใน actorId
     const logs = await this.auditLogModel
       .find()
-      .populate('actorId', 'full_name role userId') // 👈 ดึงชื่อ, บทบาท และรหัสพนักงาน
+      .populate('actorId', 'full_name role userId')
       .sort({ createdAt: -1 })
       .exec();
 
@@ -32,7 +34,6 @@ export class AuditLogsService {
 
       return {
         ...logObj,
-        // เพิ่มฟิลด์ให้อ่านง่ายขึ้นสำหรับคนดู
         actorName: (logObj.actorId as any)?.full_name || 'ไม่พบข้อมูลผู้ใช้',
         actorRole: (logObj.actorId as any)?.role || 'N/A',
         createdAtThai: (log as any).createdAt?.toLocaleString('th-TH', {

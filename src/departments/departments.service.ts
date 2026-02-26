@@ -5,12 +5,16 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, isValidObjectId, Types } from 'mongoose'; // 👈 เพิ่ม Types
+import { Model, isValidObjectId, Types } from 'mongoose';
+
+// Types & Enums
 import { Role } from '../common/enums/role.enum';
+import { AuditAction } from '../common/enums/audit-action.enum';
 import { CreateDepartmentDto } from './dto/create-department.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
-import { AuditLogsService } from '../audit-logs/audit-logs.service'; // 👈 นำเข้า Service เก็บ Log
-import { AuditAction } from '../common/enums/audit-action.enum'; // 👈 นำเข้า Enum Action
+
+// Services
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 
 @Injectable()
 export class DepartmentService {
@@ -22,7 +26,9 @@ export class DepartmentService {
     private readonly auditLogsService: AuditLogsService, // 👈 ฉีด AuditLogsService
   ) {}
 
-  // ================= 1. ค้นหาแผนกทั้งหมด =================
+  // ================= READ OPERATIONS =================
+
+  // ================= ดึงรายชื่อแผนกทั้งหมด (หรือแผนกของตัวเอง) =================
   async findAll(currentUser: any) {
     if (currentUser.role === Role.ADMIN || currentUser.role === Role.HR) {
       return this.departmentModel.find().exec();
@@ -33,7 +39,7 @@ export class DepartmentService {
     return [];
   }
 
-  // ================= 2. ค้นหาแผนกเดียว =================
+  // ================= ดึงข้อมูลแผนกเดียว =================
   async findOne(id: string) {
     if (!isValidObjectId(id)) throw new BadRequestException('ID ไม่ถูกต้อง');
     const dept = await this.departmentModel.findById(id).exec();
@@ -41,15 +47,26 @@ export class DepartmentService {
     return dept;
   }
 
-  // ================= 3. สร้างแผนก + Audit Log =================
+  // ================= WRITE OPERATIONS =================
+
+  // ================= สร้างแผนก + Audit Log =================
   async create(dto: CreateDepartmentDto, currentUser: any) {
     if (currentUser.role !== Role.ADMIN) {
       throw new ForbiddenException('เฉพาะ ADMIN เท่านั้นที่สร้างแผนกได้');
     }
 
+    // เช็คว่าชื่อแผนกซ้ำไหมก่อนสร้าง (Case-insensitive)
+    const existingDept = await this.departmentModel
+      .findOne({ name: new RegExp(`^${dto.name}$`, 'i') })
+      .exec();
+      
+    if (existingDept) {
+      throw new BadRequestException(`แผนกชื่อ "${dto.name}" มีอยู่ในระบบแล้ว`);
+    }
+
     const newDept = await this.departmentModel.create(dto);
 
-    // 🚀 บันทึก Log
+    // บันทึก Log
     await this.saveAuditLog(
       currentUser,
       AuditAction.CREATE_DEPARTMENT,
@@ -62,22 +79,22 @@ export class DepartmentService {
     return newDept;
   }
 
-  // ================= 4. แก้ไขแผนก + Audit Log =================
+  // ================= แก้ไขแผนก + Audit Log =================
   async update(id: string, dto: UpdateDepartmentDto, currentUser: any) {
     if (currentUser.role !== Role.ADMIN) {
       throw new ForbiddenException('เฉพาะ ADMIN เท่านั้นที่แก้ไขแผนกได้');
     }
-
+    
     if (!isValidObjectId(id)) throw new BadRequestException('ID ไม่ถูกต้อง');
 
     const oldDept = await this.departmentModel.findById(id).lean();
     if (!oldDept) throw new NotFoundException('ไม่พบแผนกที่ต้องการแก้ไข');
 
-    const updatedDept = await this.departmentModel
+    const updatedDept = await this.departmentModel 
       .findByIdAndUpdate(id, dto, { returnDocument: 'after' })
       .exec();
 
-    // 🚀 บันทึก Log
+    // บันทึก Log
     await this.saveAuditLog(
       currentUser,
       AuditAction.UPDATE_DEPARTMENT,
@@ -90,20 +107,32 @@ export class DepartmentService {
     return updatedDept;
   }
 
-  // ================= 5. ลบแผนก + Audit Log =================
+  // ================= ลบแผนก + Audit Log =================
   async delete(id: string, currentUser: any) {
     if (currentUser.role !== Role.ADMIN) {
       throw new ForbiddenException('เฉพาะ ADMIN เท่านั้นที่ลบแผนกได้');
     }
-
     if (!isValidObjectId(id)) throw new BadRequestException('ID ไม่ถูกต้อง');
 
     const targetDept = await this.departmentModel.findById(id).lean();
     if (!targetDept) throw new NotFoundException('ไม่พบแผนกที่ต้องการลบ');
 
+    // ตรวจสอบว่ามีพนักงานสังกัดแผนกนี้หรือไม่
+    const userInDept = await this.userModel
+      .findOne({ department: new Types.ObjectId(id) })
+      .exec();
+
+    if (userInDept) {
+      // ถ้าเจอแม้แต่คนเดียว ให้เด้ง Error ทันที
+      throw new BadRequestException(
+        `ไม่สามารถลบแผนก "${targetDept.name}" ได้ เนื่องจากยังมีพนักงานสังกัดอยู่ในแผนกนี้`,
+      );
+    }
+
+    // ถ้าไม่มีพนักงานอยู่เลย ถึงจะดำเนินการลบ
     await this.departmentModel.findByIdAndDelete(id).exec();
 
-    // 🚀 บันทึก Log
+    // บันทึก Log
     await this.saveAuditLog(
       currentUser,
       AuditAction.DELETE_DEPARTMENT,
@@ -116,7 +145,9 @@ export class DepartmentService {
     return { message: 'ลบแผนกสำเร็จ' };
   }
 
-  // 🛠️ ฟังก์ชันช่วยบันทึก Audit Log (Reusable)
+  // ================= HELPERS =================
+
+  // ฟังก์ชันนี้จะรับข้อมูลการกระทำต่างๆ แล้วบันทึกลงใน AuditLogsService โดยจะดึงชื่อผู้ทำจากฐานข้อมูลมาใส่ใน log ด้วย
   private async saveAuditLog(
     currentUser: any,
     action: AuditAction,

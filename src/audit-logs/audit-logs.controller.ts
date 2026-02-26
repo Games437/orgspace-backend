@@ -10,8 +10,9 @@ import { Role } from '../common/enums/role.enum';
 export class AuditLogsController {
   constructor(private readonly auditLogsService: AuditLogsService) {}
 
+  // ฟังก์ชันสำหรับดึง Log ทั้งหมด (เรียงจากใหม่สุดไปเก่าสุด)
   @Get()
-  @Roles(Role.ADMIN) // ให้เฉพาะ ADMIN เท่านั้นที่ดู Log ได้
+  @Roles(Role.ADMIN)
   async findAll() {
     return this.auditLogsService.findAll();
   }

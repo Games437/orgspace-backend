@@ -9,12 +9,15 @@ import {
   UseGuards,
   Req,
 } from '@nestjs/common';
+
+// Services & Security
 import { DepartmentService } from './departments.service';
 import { AccessTokenGuard } from '../common/guards/access-token.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
-// 1. นำเข้า DTO ที่เราสร้างไว้
+
+// DTOs
 import { CreateDepartmentDto } from './dto/create-department.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
 
@@ -23,6 +26,24 @@ import { UpdateDepartmentDto } from './dto/update-department.dto';
 export class DepartmentsController {
   constructor(private readonly departmentService: DepartmentService) {}
 
+  // ================= READ OPERATIONS (การดึงข้อมูล) =================
+
+  // เพิ่ม endpoint นี้เพื่อให้ผู้ใช้ที่มีสิทธิ์ ADMIN, HR สามารถดูรายชื่อแผนกทั้งหมดได้
+  @Get()
+  @Roles(Role.ADMIN, Role.HR)
+  async findAll(@Req() req: any) {
+    return this.departmentService.findAll(req.user);
+  }
+
+  @Get(':id')
+  @Roles(Role.ADMIN, Role.HR)
+  async findOne(@Param('id') id: string) {
+    return this.departmentService.findOne(id);
+  }
+
+  // ================= WRITE OPERATIONS (การจัดการข้อมูล) =================
+
+  // เพิ่ม endpoint นี้เพื่อให้ผู้ใช้ที่มีสิทธิ์ ADMIN สามารถสร้างแผนกใหม่ได้
   @Roles(Role.ADMIN)
   @Post()
   async create(
@@ -32,18 +53,7 @@ export class DepartmentsController {
     return this.departmentService.create(dto, req.user);
   }
 
-  @Get()
-  @Roles(Role.ADMIN, Role.HR, Role.MANAGER, Role.EMPLOYEE)
-  async findAll(@Req() req: any) {
-    return this.departmentService.findAll(req.user);
-  }
-
-  @Get(':id')
-  @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
-  async findOne(@Param('id') id: string) {
-    return this.departmentService.findOne(id);
-  }
-
+  // เพิ่ม endpoint นี้เพื่อให้ผู้ใช้ที่มีสิทธิ์ ADMIN สามารถแก้ไขข้อมูลแผนกได้
   @Put(':id')
   @Roles(Role.ADMIN)
   async update(
@@ -54,6 +64,7 @@ export class DepartmentsController {
     return this.departmentService.update(id, dto, req.user);
   }
 
+  // เพิ่ม endpoint นี้เพื่อให้ผู้ใช้ที่มีสิทธิ์ ADMIN สามารถลบแผนกได้
   @Delete(':id')
   @Roles(Role.ADMIN)
   async remove(@Param('id') id: string, @Req() req: any) {

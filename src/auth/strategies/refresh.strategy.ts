@@ -1,30 +1,39 @@
-// src/auth/strategies/refresh.strategy.ts
 import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
+import { Request } from 'express';
 
-type JwtPayload = { sub: string; email: string; role: string };
+// ปรับปรุง Type ให้ตรงกับ Payload จริงที่ใช้อยู่ในระบบ
+type JwtPayload = {
+  sub: string;
+  role: string;
+  department: string;
+};
 
 @Injectable()
 export class RefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
-  constructor(config: ConfigService) {
+  constructor(readonly config: ConfigService) {
     super({
+      // ดึงจาก Header (Bearer Token) ตามโค้ดเดิม
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: config.getOrThrow<string>('JWT_REFRESH_SECRET'),
-      passReqToCallback: true,
+      passReqToCallback: true, // เพื่อให้ฟังก์ชัน validate รับ req ได้
     });
   }
 
-  // เพิ่ม req เป็นพารามิเตอร์ในฟังก์ชัน validate
-  validate(req: any, payload: JwtPayload) {
-    const authHeader = req.get('authorization') as string | undefined;
-    const refreshToken = authHeader?.replace('Bearer', '').trim();
+  validate(req: Request, payload: JwtPayload) {
+    // ดึง Refresh Token ตัวเต็มจาก Header เพื่อเอาไปตรวจสอบ (Verify) กับ Hash ใน Database
+    const refreshToken = req
+      ?.get('authorization')
+      ?.replace('Bearer', '')
+      .trim();
 
-    // ส่งกลับแค่ id และ refreshToke เพื่อให้ controller ใช้ในการตรวจสอบและออก token ใหม่
     return {
       id: payload.sub,
+      role: payload.role,
+      department: payload.department,
       refreshToken,
     };
   }

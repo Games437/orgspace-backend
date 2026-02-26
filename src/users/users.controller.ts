@@ -9,27 +9,33 @@ import {
   UseGuards,
   Req,
   Res,
-} from '@nestjs/common'; // 👈 เพิ่ม Put, Body, Param
+} from '@nestjs/common';
+import type { Response } from 'express';
+
+// Services & Security
 import { UsersService } from './users.service';
 import { AccessTokenGuard } from '../common/guards/access-token.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
-import { UpdateUserDto } from './dto/update-user.dto'; // 👈 อย่าลืม Import DTO
-import { CreateUserDto } from './dto/create-user.dto';
-import type { Response } from 'express';
 
+// DTOs
+import { UpdateUserDto } from './dto/update-user.dto';
+import { CreateUserDto } from './dto/create-user.dto';
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @UseGuards(AccessTokenGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.HR) // 👈 ดักสิทธิ์หน้าประตู ให้เข้าได้แค่ ADMIN และ HR
-  @Post()
-  createUser(@Body() dto: CreateUserDto, @Req() req: any) {
-    return this.usersService.createUser(dto, req.user);
+  // ================= PROFILE & READ =================
+
+  // เพิ่ม endpoint นี้เพื่อให้ผู้ใช้ที่ล็อกอินแล้วสามารถดูข้อมูลโปรไฟล์ของตัวเองได้
+  @UseGuards(AccessTokenGuard)
+  @Get('profile')
+  getProfile(@Req() req: any) {
+    return this.usersService.findMe(req.user);
   }
 
+  // เพิ่ม endpoint นี้เพื่อให้ผู้ใช้ที่มีสิทธิ์ ADMIN, HR, MANAGER สามารถดูรายชื่อผู้ใช้ทั้งหมดได้
   @UseGuards(AccessTokenGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
   @Get()
@@ -37,30 +43,39 @@ export class UsersController {
     return this.usersService.findAll(req.user);
   }
 
-  @UseGuards(AccessTokenGuard)
-  @Get('profile')
-  getProfile(@Req() req: any) {
-    return this.usersService.findMe(req.user);
+  // ================= MANAGEMENT OPERATIONS (CUD) =================
+
+  // เพิ่ม endpoint นี้เพื่อให้ผู้ใช้ที่มีสิทธิ์ ADMIN และ HR สามารถสร้างผู้ใช้ใหม่ได้
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.HR)
+  @Post()
+  createUser(@Body() dto: CreateUserDto, @Req() req: any) {
+    return this.usersService.createUser(dto, req.user);
   }
 
-  // 🚀 เพิ่มฟังก์ชันนี้เข้าไปเพื่อให้รองรับ PUT /users/{id}
+  // เพิ่ม endpoint นี้เพื่อให้ผู้ใช้ที่มีสิทธิ์ ADMIN, HR สามารถแก้ไขข้อมูลผู้ใช้ได้
   @UseGuards(AccessTokenGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
-  @Put(':id') // 👈 กำหนด Path parameter เป็น :id
+  @Roles(Role.ADMIN, Role.HR)
+  @Put(':id') 
   updateUser(
     @Param('id') id: string,
     @Body() dto: UpdateUserDto,
     @Req() req: any,
   ) {
-    // ส่ง id, ข้อมูลที่แก้ (dto), และข้อมูลผู้ทำรายการ (req.user) ไปที่ Service
     return this.usersService.updateUser(id, dto, req.user);
   }
+
+  // เพิ่ม endpoint นี้เพื่อให้ผู้ใช้ที่มีสิทธิ์ ADMIN, HR สามารถลบผู้ใช้ได้
   @UseGuards(AccessTokenGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
+  @Roles(Role.ADMIN, Role.HR)
   @Delete(':id')
   deleteUser(@Param('id') id: string, @Req() req) {
     return this.usersService.deleteUser(id, req.user);
   }
+
+  // ================= REPORTS & EXPORT =================
+
+  // เพิ่ม endpoint นี้เพื่อให้ผู้ใช้ที่มีสิทธิ์ ADMIN และ HR สามารถดาวน์โหลดรายงานผู้ใช้ในรูปแบบ CSV ได้
   @UseGuards(AccessTokenGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.HR)
   @Get('export/report')

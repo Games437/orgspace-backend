@@ -26,7 +26,6 @@ export class AuthDto {
   @MinLength(8, { message: 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร' })
   password: string;
 
-  // 👇 ต้องใส่ Decorator ให้ฟิลด์เหล่านี้ด้วย
   @IsString()
   @IsOptional()
   full_name: string;

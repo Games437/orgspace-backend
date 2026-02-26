@@ -6,6 +6,7 @@ export type UserDocument = HydratedDocument<User>;
 
 @Schema({ timestamps: true })
 export class User {
+  // ================= ACCOUNT IDENTITY (ข้อมูลระบุตัวตนและบัญชี) =================
   @Prop({
     required: true,
     unique: true,
@@ -15,20 +16,16 @@ export class User {
   })
   userId: string;
 
-  @Prop({
-    required: true,
-    select: false,
-  })
-  passwordHash: string;
-
   @Prop({ required: true, trim: true })
   full_name: string;
 
-  @Prop({ required: true })
-  salary: number;
+  @Prop({
+    enum: Role,
+    default: Role.EMPLOYEE,
+  })
+  role: Role;
 
-  @Prop({ required: true, trim: true })
-  position: string;
+  // ================= EMPLOYEE INFO (ข้อมูลการจ้างงาน) =================
 
   @Prop({
     type: Types.ObjectId,
@@ -37,11 +34,19 @@ export class User {
   })
   department: Types.ObjectId;
 
+  @Prop({ required: true })
+  salary: number;
+
+  @Prop({ required: true, trim: true })
+  position: string;
+
+  // ================= SECURITY & AUTH (ความปลอดภัยและการเข้าถึง) =================
+
   @Prop({
-    enum: Role,
-    default: Role.EMPLOYEE,
+    required: true,
+    select: false,
   })
-  role: Role;
+  passwordHash: string;
 
   @Prop({
     type: String,
@@ -50,17 +55,19 @@ export class User {
   })
   refreshTokenHash?: string | null;
 
-  @Prop({ default: 0 })
-  failedLoginAttempts: number;
-
-  @Prop({ type: Date, default: null })
-  lockUntil: Date | null;
-
   @Prop()
   passwordResetToken?: string;
 
   @Prop()
   passwordResetExpires?: Date;
+
+  // ================= LOGIN PROTECTION (ระบบป้องกันการเดารหัสผ่าน) =================
+
+  @Prop({ default: 0 })
+  failedLoginAttempts: number;
+
+  @Prop({ type: Date, default: null })
+  lockUntil: Date | null;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
