@@ -22,7 +22,7 @@ export class RoomsService {
     private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  // 1. สร้างห้องใหม่
+  // สร้างห้องใหม่
   async create(createRoomDto: CreateRoomDto, currentUser: any) {
     if (currentUser.role !== Role.ADMIN) {
       throw new ForbiddenException('เฉพาะ ADMIN เท่านั้นที่จัดการห้องได้');
@@ -42,7 +42,7 @@ export class RoomsService {
     return newRoom;
   }
 
-  // 2. ดูห้องเดี่ยว
+  // ดูห้องเดี่ยว
   async findOne(id: string) {
     if (!Types.ObjectId.isValid(id)) throw new BadRequestException('รหัสห้องไม่ถูกต้อง');
     const room = await this.roomModel.findById(id).exec();
@@ -50,12 +50,12 @@ export class RoomsService {
     return room;
   }
 
-  // 3. ดูห้องทั้งหมด
+  // ดูห้องทั้งหมด
   async findAll() {
     return await this.roomModel.find({ isActive: true }).exec();
   }
 
-  // 4. ค้นหาห้องที่ว่าง (หัวใจของระบบจอง)
+  // ค้นหาห้องที่ว่าง
   async findAvailableRooms(startTime: string, endTime: string) {
     const start = new Date(startTime);
     const end = new Date(endTime);
@@ -64,7 +64,7 @@ export class RoomsService {
       throw new BadRequestException('ช่วงเวลาไม่ถูกต้องครับ');
     }
 
-    // 
+    // หาห้องที่มีการจองทับซ้อนในช่วงเวลาที่กำหนด
     const busyBookings = await this.bookingModel
       .find({
         status: { $ne: 'CANCELLED' },
@@ -74,13 +74,13 @@ export class RoomsService {
       .exec();
 
     const busyRoomIds = busyBookings.map((b) => b.roomId);
-    
+
     return await this.roomModel
       .find({ _id: { $nin: busyRoomIds }, isActive: true })
       .exec();
   }
 
-  // 5. แก้ไขห้อง
+  // แก้ไขห้อง (พร้อม Security Check)
   async update(id: string, updateData: any, currentUser: any) {
     if (currentUser.role !== Role.ADMIN) {
       throw new ForbiddenException('เฉพาะ ADMIN เท่านั้นที่แก้ไขห้องได้');
@@ -109,7 +109,7 @@ export class RoomsService {
     return updatedRoom;
   }
 
-  // 6. ลบห้อง (Hard Delete พร้อม Security Check)
+  // ลบห้อง (พร้อม Security Check และ Validation)
   async remove(id: string, currentUser: any) {
     if (currentUser.role !== Role.ADMIN) {
       throw new ForbiddenException('เฉพาะ ADMIN เท่านั้นที่ลบห้องได้');
@@ -118,7 +118,7 @@ export class RoomsService {
     const room = await this.roomModel.findById(id);
     if (!room) throw new NotFoundException('ไม่พบห้องที่ต้องการลบ');
 
-    // 🛡️ ห้ามลบถ้ามีคิวจองในอนาคต
+    // ตรวจสอบว่ามีการจองในอนาคตหรือไม่
     const futureBooking = await this.bookingModel
       .findOne({
         roomId: id,
@@ -147,7 +147,7 @@ export class RoomsService {
     return { message: 'ลบห้องออกจากระบบสำเร็จ' };
   }
 
-  // 7. ฟังก์ชันช่วยบันทึก Log
+  // ฟังก์ชันสำหรับบันทึก Audit Log
   private async logAction(
     currentUser: any,
     action: AuditAction,
@@ -157,8 +157,7 @@ export class RoomsService {
     newValue: any,
   ) {
     const actorId = currentUser.id || currentUser.sub;
-    
-    // ✅ กำหนด Type: any เพื่อป้องกัน TS Error 'never'
+
     let actor: any = null;
     if (Types.ObjectId.isValid(actorId)) {
       actor = await this.userModel.findById(actorId).exec();

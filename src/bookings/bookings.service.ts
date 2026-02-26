@@ -22,7 +22,8 @@ export class BookingsService {
     private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  @Cron(CronExpression.EVERY_10_MINUTES)
+  // จองห้องประชุม (ปรับปรุง: รองรับ Buffer Time และบันทึก Log)
+  @Cron(CronExpression.EVERY_10_MINUTES) // รันทุก 10 นาทีเพื่อตรวจสอบการจองที่หมดเวลาแล้ว
   async handleAutoArchive() {
     const now = new Date();
     console.log(
@@ -41,6 +42,7 @@ export class BookingsService {
     }
   }
 
+  // จองห้องประชุม (ปรับปรุง: รองรับ Buffer Time และบันทึก Log)
   async create(createBookingDto: CreateBookingDto, currentUser: any) {
     const { roomName, startTime, endTime, title } = createBookingDto;
     const start = new Date(startTime);
@@ -61,8 +63,9 @@ export class BookingsService {
         `ไม่พบห้องชื่อ "${roomName}" หรือห้องถูกปิดใช้งานแล้ว`,
       );
 
-    const bufferMs = (room.bufferTime || 0) * 60 * 1000;
+    const bufferMs = (room.bufferTime || 0) * 60 * 1000; // แปลง bufferTime จากนาทีเป็นมิลลิวินาที
 
+    // ค้นหาการจองที่ทับซ้อนกัน โดยคำนึงถึง buffer time ทั้งก่อนและหลังช่วงเวลาที่ต้องการจอง
     const overlappingBooking = await this.bookingModel.findOne({
       roomId: room._id,
       status: { $ne: 'CANCELLED' },
@@ -74,6 +77,7 @@ export class BookingsService {
       ],
     });
 
+    // ถ้ามีการจองที่ทับซ้อนกัน ให้คำนวณเวลาที่ห้องจะว่างจริงๆ หลังจาก buffer time และแจ้งผู้ใช้
     if (overlappingBooking) {
       const actualAvailableTime = new Date(
         overlappingBooking.endTime.getTime() + bufferMs,
@@ -83,6 +87,7 @@ export class BookingsService {
       );
     }
 
+    // ถ้าไม่มีการทับซ้อนกัน ให้สร้างการจองใหม่
     const newBooking = new this.bookingModel({
       ...createBookingDto,
       roomId: room._id,
@@ -96,6 +101,7 @@ export class BookingsService {
       { path: 'userId', select: 'full_name' },
     ]);
 
+    // บันทึก Log Action
     await this.logAction(
       currentUser,
       AuditAction.CREATE_BOOKING,
@@ -108,7 +114,7 @@ export class BookingsService {
     return savedBooking;
   }
 
-  // 2. ค้นหาประวัติการจอง (ปรับปรุง: รองรับโหมด All และ My)
+  // ดึงข้อมูลการจอง (ปรับปรุง: รองรับการกรองตามห้องและวันที่)
   async findAll(
     currentUser: any,
     type: 'all' | 'my' = 'all',
@@ -117,9 +123,9 @@ export class BookingsService {
   ) {
     const filter: any = {};
 
-    // 🛡️ เช็คสิทธิ์การดึงข้อมูล
+    // เช็คสิทธิ์การดึงข้อมูล
     if (type === 'my') {
-      // ถ้าเลือกโหมด 'my' ให้เห็นเฉพาะของตัวเอง (ไม่ว่าจะเป็น ADMIN หรือ USER)
+      // ถ้าเลือกโหมด 'my' ให้ใส่ filter.userId เพื่อให้ผู้ใช้เห็นเฉพาะการจองของตัวเอง
       filter.userId = currentUser.id || currentUser.sub;
     }
     // ถ้าเลือกโหมด 'all' ไม่ต้องใส่ filter.userId เพื่อให้ทุกคนเห็นการจองของกันและกัน
@@ -145,7 +151,7 @@ export class BookingsService {
       .exec();
   }
 
-  // 3. ยกเลิกการจอง (เช็คสิทธิ์ความเป็นเจ้าของ)
+  // ยกเลิกการจอง (เช็คสิทธิ์ความเป็นเจ้าของ)
   async cancelBooking(id: string, currentUser: any) {
     if (!Types.ObjectId.isValid(id))
       throw new BadRequestException('รหัสการจองไม่ถูกต้อง');
@@ -159,7 +165,6 @@ export class BookingsService {
 
     const actorId = currentUser.id || currentUser.sub;
 
-    // 🛡️ กฎเหล็ก:
     // 1. ถ้าเป็น ADMIN -> ลบได้ทุกคน
     // 2. ถ้าไม่ใช่ ADMIN -> ต้องเป็นเจ้าของ (userId ตรงกัน) เท่านั้นถึงจะลบได้
     const isOwner = booking.userId.toString() === actorId.toString();
@@ -169,6 +174,7 @@ export class BookingsService {
       throw new ForbiddenException('คุณไม่มีสิทธิ์ยกเลิกการจองของผู้อื่น');
     }
 
+    // อัปเดตสถานะเป็น 'CANCELLED' แทนการลบข้อมูลจริง
     const result = await this.bookingModel
       .findByIdAndUpdate(
         id,

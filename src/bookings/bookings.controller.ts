@@ -16,9 +16,9 @@ import { AccessTokenGuard } from '../common/guards/access-token.guard';
 @Controller('bookings')
 @UseGuards(AccessTokenGuard)
 export class BookingsController {
-  constructor(private readonly bookingsService: BookingsService) {}
+  constructor(private readonly bookingsService: BookingsService) { }
 
-  // 1. จองห้องประชุม
+  // สร้างการจองใหม่
   @Post()
   async create(
     @Body() createBookingDto: CreateBookingDto,
@@ -27,21 +27,20 @@ export class BookingsController {
     return this.bookingsService.create(createBookingDto, req.user);
   }
 
-  // 2. ดูประวัติการจอง (กรองตาม roomId หรือ date ได้)
-@Get()
+  // ดึงข้อมูลการจอง (รองรับการกรองตามประเภทและห้องประชุม)
+  @Get()
   async findAll(
     @Req() req: any,
-    @Query('type') type: 'all' | 'my' = 'all', // เพิ่ม type: default คือดูทั้งหมด
+    @Query('type') type: 'all' | 'my' = 'all',
     @Query('roomId') roomId: string,
     @Query('date') date: string,
   ) {
     return this.bookingsService.findAll(req.user, type, roomId, date);
   }
 
-  // 3. ยกเลิกการจอง
+  //ยกเลิกการจอง
   @Patch(':id/cancel')
   async cancel(@Param('id') id: string, @Req() req: any) {
-    // Logic ใน Service จะเช็คความเป็นเจ้าของให้เอง
     return this.bookingsService.cancelBooking(id, req.user);
   }
 }

@@ -12,15 +12,12 @@ import { AuditLogsModule } from '../audit-logs/audit-logs.module';
     MongooseModule.forFeature([
       { name: Booking.name, schema: BookingSchema },
       { name: Room.name, schema: RoomSchema },
-      // 💡 แนะนำ: ใช้ User.name แทนการพิมพ์ 'User' แบบ string 
-      // เพื่อความปลอดภัยในการอ้างอิงชื่อ Model
-      { name: User.name, schema: UserSchema }, 
+      { name: User.name, schema: UserSchema },
     ]),
-    AuditLogsModule, // นำเข้าโมดูลบันทึก Log
+    AuditLogsModule,
   ],
   controllers: [BookingsController],
   providers: [BookingsService],
-  // 💡 ส่งออกเพื่อให้โมดูลอื่น (เช่น Rooms) เรียกใช้ตรวจสอบสถานะการจองได้
-  exports: [BookingsService], 
+  exports: [BookingsService],
 })
 export class BookingsModule {}

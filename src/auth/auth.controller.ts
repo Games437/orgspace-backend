@@ -131,7 +131,6 @@ export class AuthController {
     return this.authService.requestPasswordReset(
       targetUserId,
       req.user,
-      requestId,
     );
   }
 }

@@ -6,16 +6,16 @@ export type RoomDocument = Room & Document;
 
 @Schema({ timestamps: true })
 export class Room {
-  @Prop({ required: true, trim: true, index: true }) // trim เพื่อตัดช่องว่างหัว-ท้าย และ index เพื่อให้ค้นหาด้วยชื่อไวขึ้น
+  @Prop({ required: true, trim: true, index: true })
   name: string;
 
-  @Prop({ required: true, min: 1, index: true }) // index เพื่อให้ Filter ตามขนาดความจุได้เร็ว
+  @Prop({ required: true, min: 1, index: true })
   capacity: number;
 
   @Prop({ type: [String], default: [] })
   facilities: string[];
 
-  @Prop({ default: true, index: true }) // index เพื่อให้ดึงเฉพาะห้องที่พร้อมใช้งาน (isActive: true) ได้ไว
+  @Prop({ default: true, index: true })
   isActive: boolean;
 
   @Prop({ default: 15 })
