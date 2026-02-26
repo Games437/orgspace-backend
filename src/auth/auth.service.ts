@@ -2,7 +2,7 @@
 import {
   Injectable,
   BadRequestException,
-  ConflictException, // 
+  ConflictException, //
   UnauthorizedException,
   ForbiddenException,
 } from '@nestjs/common';
@@ -250,15 +250,20 @@ export class AuthService {
 
   // เพิ่มฟังก์ชันดึงรายการคำขอทั้งหมด
   async getAllResetRequests() {
-    // ในที่นี้สมมติว่าคุณเก็บสถานะไว้ใน User หรือ Schema แยก 
+    // ในที่นี้สมมติว่าคุณเก็บสถานะไว้ใน User หรือ Schema แยก
     // ถ้าเก็บใน User ให้หาคนที่มี passwordResetExpires > ปัจจุบัน และยังมี Token ค้างอยู่
     return await this.usersService.findAllResetRequests();
     // ^ อย่าลืมไปเพิ่มฟังก์ชันนี้ใน UsersService เพื่อ return รายการคนที่กด "ลืมรหัสผ่าน" มา
   }
 
-  async requestPasswordReset(targetUserId: string, requestId?: string) {
-    // หมายเหตุ: ใน Controller คุณส่ง (targetUserId, requestId) มา
+  async requestPasswordReset(targetUserId: string, adminFromToken: any, requestId?: string) {
+    // 1. ดึงข้อมูล Admin จาก DB ใหม่ (เหมือนที่ resetPassword ทำ)
+    const admin = await this.usersService.findById(adminFromToken.id || adminFromToken.sub);
+    if (!admin) {
+      throw new UnauthorizedException('ไม่พบข้อมูลผู้ดำเนินการในระบบ');
+    }
 
+    // 2. ข้อมูล Admin จะมาครบเหมือนอันที่ผ่านๆ มาแล้วครับ
     const normalizedTargetId = targetUserId.trim().toLowerCase();
     const targetUser = await this.usersService.findByUserId(normalizedTargetId);
 
@@ -282,25 +287,23 @@ export class AuthService {
     if (requestId) {
       // ถ้าคุณมี Model ResetRequest ให้ Update สถานะที่นี่
       // await this.resetRequestModel.findByIdAndUpdate(requestId, { status: 'APPROVED' });
-
       // หรือถ้าใช้ Logic อื่นในการล้าง List หน้าบ้าน ก็จัดการที่นี่ครับ
     }
 
     // บันทึก Audit Log (ใช้ข้อมูลจาก targetUser)
     await this.auditLogsService.log({
-      actorId: targetUser._id, // หรือ Admin ID ถ้าคุณส่งผ่านมา
+      actorId: admin._id,
       actorInfo: {
-        full_name: targetUser.full_name,
-        role: targetUser.role,
-        userId: targetUser.userId,
+        full_name: admin.full_name,
+        role: admin.role,
+        userId: admin.userId,
       },
-      action: AuditAction.PASSWORD_RESET_REQUEST,
+      action: AuditAction.PASSWORD_RESET_APPROVED,
       targetId: String(targetUser._id),
-      details: `อนุมัติการรีเซ็ตรหัสผ่านให้ ${targetUser.userId}`,
+      details: `Admin (${admin.userId}) อนุมัติการรีเซ็ตรหัสผ่านให้ ${targetUser.userId}`,
       oldValue: null,
       newValue: { expires: targetUser.passwordResetExpires },
     });
-
     return {
       message: 'สร้างลิงก์รีเซ็ตสำเร็จ',
       token: resetToken, // 👈 ส่ง token กลับไปเพื่อให้หน้าบ้านเอาไปต่อ URL
@@ -378,7 +381,7 @@ export class AuthService {
         role: user.role,
         userId: user.userId,
       },
-      action: AuditAction.PASSWORD_RESET_REQUEST, 
+      action: AuditAction.REQUEST_RESET_PASSWORD,
       targetId: String(user._id),
       details: `พนักงานส่งคำขอรีเซ็ตรหัสผ่านจากหน้า Login (รอ Admin อนุมัติ)`,
       oldValue: oldValue.token ? oldValue : null,

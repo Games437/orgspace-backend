@@ -20,7 +20,7 @@ import { Role } from 'src/common/enums/role.enum';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) { }
+  constructor(private authService: AuthService) {}
 
   @Post('signup')
   signup(@Body() dto: AuthDto) {
@@ -109,10 +109,15 @@ export class AuthController {
   @Post('admin/request-reset')
   async adminRequestReset(
     @Body('targetUserId') targetUserId: string,
-    @Body('requestId') requestId: string, // 👈 เพิ่มการรับ requestId จากหน้าบ้าน
+    @Body('requestId') requestId: string,
+    @Req() req: any, // ดึง request มาเพื่อเอา user
   ) {
-    // ส่งทั้ง targetUserId และ requestId ไปที่ Service
-    return this.authService.requestPasswordReset(targetUserId, requestId);
+    // ✅ ส่ง req.user เข้าไปเป็นพารามิเตอร์ตัวที่ 2
+    return this.authService.requestPasswordReset(
+      targetUserId,
+      req.user,
+      requestId,
+    );
   }
 
   // 2. รับ Token จาก URL และรหัสผ่านใหม่จาก Body
@@ -131,7 +136,7 @@ export class AuthController {
     return this.authService.getAllResetRequests();
   }
   @Post('request-reset') // ให้ User ทั่วไปเรียกได้โดยไม่ต้อง Login
-async userRequestReset(@Body('userId') userId: string) {
-  return this.authService.createUserResetRequest(userId);
-}
+  async userRequestReset(@Body('userId') userId: string) {
+    return this.authService.createUserResetRequest(userId);
+  }
 }

@@ -28,14 +28,14 @@ export class BookingsController {
   }
 
   // 2. ดูประวัติการจอง (กรองตาม roomId หรือ date ได้)
-  @Get()
+@Get()
   async findAll(
-    @Req() req: any, // เปลี่ยนจาก @CurrentUser() เป็น @Request()
+    @Req() req: any,
+    @Query('type') type: 'all' | 'my' = 'all', // เพิ่ม type: default คือดูทั้งหมด
     @Query('roomId') roomId: string,
     @Query('date') date: string,
   ) {
-    const user = req.user; // ดึง user ออกจาก request
-    return this.bookingsService.findAll(user, roomId, date);
+    return this.bookingsService.findAll(req.user, type, roomId, date);
   }
 
   // 3. ยกเลิกการจอง
