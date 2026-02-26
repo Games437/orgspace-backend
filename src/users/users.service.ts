@@ -366,4 +366,25 @@ export class UsersService {
       })
       .exec();
   }
+  async findAllResetRequests() {
+    // ค้นหา User ทุกคนที่มีฟิลด์ passwordResetToken และ Token นั้นยังไม่หมดอายุ
+    const users = await this.userModel
+      .find({
+        passwordResetToken: { $ne: null }, // มี Token อยู่
+        passwordResetExpires: { $gt: new Date() }, // และยังไม่หมดอายุ (Greater Than Now)
+      })
+      .select('full_name userId _id') // เลือกเฉพาะฟิลด์ที่หน้าบ้านต้องใช้แสดงผล
+      .exec();
+
+    // ปรับ Format ข้อมูลให้ตรงกับที่หน้าบ้าน (Frontend) รอรับ
+    // หน้าบ้านเรียกใช้ req.user.full_name ดังนั้นเราจะครอบ user: { ... } ให้ครับ
+    return users.map((user) => ({
+      _id: user._id, // นี่คือ requestId (ในกรณีที่คุณไม่ได้สร้าง Schema แยก)
+      user: {
+        _id: user._id,
+        full_name: user.full_name,
+        userId: user.userId,
+      },
+    }));
+  }
 }

@@ -24,7 +24,7 @@ export class AuthService {
     private jwtService: JwtService,
     private config: ConfigService,
     private readonly auditLogsService: AuditLogsService,
-  ) {}
+  ) { }
 
   private normalizeUserId(userId: string) {
     return userId.trim().toLowerCase();
@@ -248,14 +248,17 @@ export class AuthService {
     return { success: true };
   }
 
-  async requestPasswordReset(adminMongoId: string, targetUserId: string) {
-    const admin = await this.usersService.findById(adminMongoId);
+  // เพิ่มฟังก์ชันดึงรายการคำขอทั้งหมด
+  async getAllResetRequests() {
+    // ในที่นี้สมมติว่าคุณเก็บสถานะไว้ใน User หรือ Schema แยก 
+    // ถ้าเก็บใน User ให้หาคนที่มี passwordResetExpires > ปัจจุบัน และยังมี Token ค้างอยู่
+    return await this.usersService.findAllResetRequests();
+    // ^ อย่าลืมไปเพิ่มฟังก์ชันนี้ใน UsersService เพื่อ return รายการคนที่กด "ลืมรหัสผ่าน" มา
+  }
 
-    if (!admin || admin.role !== Role.ADMIN) {
-      throw new ForbiddenException('เฉพาะผู้ดูแลระบบเท่านั้นที่ทำรายการนี้ได้');
-    }
+  async requestPasswordReset(targetUserId: string, requestId?: string) {
+    // หมายเหตุ: ใน Controller คุณส่ง (targetUserId, requestId) มา
 
-    // เพิ่ม .toLowerCase() ถ้าคุณเก็บ userId เป็นตัวเล็กทั้งหมด
     const normalizedTargetId = targetUserId.trim().toLowerCase();
     const targetUser = await this.usersService.findByUserId(normalizedTargetId);
 
@@ -263,39 +266,44 @@ export class AuthService {
       throw new BadRequestException('ไม่พบข้อมูลพนักงานที่ต้องการรีเซ็ต');
     }
 
+    // สร้าง Secure Token
     const resetToken = crypto.randomBytes(32).toString('hex');
     const hashedToken = crypto
       .createHash('sha256')
       .update(resetToken)
       .digest('hex');
 
+    // บันทึก Token ลงใน User
     targetUser.passwordResetToken = hashedToken;
-    targetUser.passwordResetExpires = new Date(Date.now() + 15 * 60 * 1000);
+    targetUser.passwordResetExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 นาที
     await targetUser.save();
 
+    // 🏆 ส่วนสำคัญ: ถ้ามี requestId ส่งมา (จากตารางคำขอหน้าบ้าน) ให้ทำการปิดงาน
+    if (requestId) {
+      // ถ้าคุณมี Model ResetRequest ให้ Update สถานะที่นี่
+      // await this.resetRequestModel.findByIdAndUpdate(requestId, { status: 'APPROVED' });
+
+      // หรือถ้าใช้ Logic อื่นในการล้าง List หน้าบ้าน ก็จัดการที่นี่ครับ
+    }
+
+    // บันทึก Audit Log (ใช้ข้อมูลจาก targetUser)
     await this.auditLogsService.log({
-      // ✅ ใช้ Types.ObjectId ครอบเพื่อให้มั่นใจว่า Schema AuditLog รับได้
-      actorId: new Types.ObjectId(adminMongoId),
+      actorId: targetUser._id, // หรือ Admin ID ถ้าคุณส่งผ่านมา
       actorInfo: {
-        full_name: admin.full_name,
-        role: admin.role,
-        userId: admin.userId,
+        full_name: targetUser.full_name,
+        role: targetUser.role,
+        userId: targetUser.userId,
       },
       action: AuditAction.PASSWORD_RESET_REQUEST,
       targetId: String(targetUser._id),
-      details: `Admin ${admin.userId} ร้องขอการรีเซ็ตรหัสผ่านให้พนักงาน ${targetUserId}`,
+      details: `อนุมัติการรีเซ็ตรหัสผ่านให้ ${targetUser.userId}`,
       oldValue: null,
-      newValue: {
-        expires: targetUser.passwordResetExpires,
-        targetUserId: targetUser.userId, // เก็บไว้ดูใน log ชัดๆ
-      },
+      newValue: { expires: targetUser.passwordResetExpires },
     });
 
-    const frontendUrl = this.config.get<string>('FRONTEND_URL');
     return {
-      message: 'สร้างลิงก์รีเซ็ตสำเร็จ โปรดส่งลิงก์นี้ให้พนักงาน',
-      // ตรวจสอบว่า frontendUrl ไม่มี / ต่อท้าย เพื่อไม่ให้ URL เพี้ยนเป็น //reset-password
-      resetLink: `${frontendUrl}/reset-password/${resetToken}`,
+      message: 'สร้างลิงก์รีเซ็ตสำเร็จ',
+      token: resetToken, // 👈 ส่ง token กลับไปเพื่อให้หน้าบ้านเอาไปต่อ URL
     };
   }
 
@@ -336,5 +344,50 @@ export class AuthService {
     });
 
     return { success: true, message: 'เปลี่ยนรหัสผ่านใหม่เรียบร้อยแล้ว' };
+  }
+  async createUserResetRequest(userId: string) {
+    const user = await this.usersService.findByUserId(userId.toLowerCase());
+    if (!user) throw new BadRequestException('ไม่พบ User ID นี้ในระบบ');
+
+    const hasActiveRequest =
+      user.passwordResetToken &&
+      user.passwordResetExpires &&
+      user.passwordResetExpires > new Date();
+
+    if (hasActiveRequest) {
+      throw new BadRequestException('คุณมีคำขอที่รอดำเนินการอยู่แล้ว');
+    }
+
+    // 1. บันทึกค่าเก่าไว้ทำ Audit Log (ถ้ามี)
+    const oldValue = {
+      token: user.passwordResetToken,
+      expires: user.passwordResetExpires,
+    };
+
+    // 2. เซ็ตค่าสถานะ PENDING
+    user.passwordResetToken = 'PENDING';
+    user.passwordResetExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await user.save();
+
+    // ✅ 3. บันทึก Audit Log
+    // เนื่องจากผู้ใช้ยังไม่ได้ Login เราจะใช้ข้อมูลจากตัว User ที่ถูกดึงขึ้นมาเป็น Actor
+    await this.auditLogsService.log({
+      actorId: user._id, // คนที่เป็นเจ้าของบัญชี
+      actorInfo: {
+        full_name: user.full_name,
+        role: user.role,
+        userId: user.userId,
+      },
+      action: AuditAction.PASSWORD_RESET_REQUEST, 
+      targetId: String(user._id),
+      details: `พนักงานส่งคำขอรีเซ็ตรหัสผ่านจากหน้า Login (รอ Admin อนุมัติ)`,
+      oldValue: oldValue.token ? oldValue : null,
+      newValue: {
+        status: 'PENDING',
+        expires: user.passwordResetExpires,
+      },
+    });
+
+    return { message: 'ส่งคำขอสำเร็จ' };
   }
 }

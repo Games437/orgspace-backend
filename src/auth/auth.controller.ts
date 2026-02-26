@@ -20,7 +20,7 @@ import { Role } from 'src/common/enums/role.enum';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthService) { }
 
   @Post('signup')
   signup(@Body() dto: AuthDto) {
@@ -103,16 +103,16 @@ export class AuthController {
     });
     return this.authService.logout(req.user.sub);
   }
-  // 1. รับคำขอรีเซ็ตรหัสผ่าน
-  @UseGuards(AccessTokenGuard, RolesGuard) // ต้องล็อกอินและเช็ก Role
-  @Roles(Role.ADMIN) // เฉพาะ Admin เท่านั้น
+  // 1. อนุมัติคำขอรีเซ็ตรหัสผ่าน (Admin)
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @Post('admin/request-reset')
   async adminRequestReset(
-    @Req() req: any, // ดึงข้อมูล Admin จาก JWT
     @Body('targetUserId') targetUserId: string,
+    @Body('requestId') requestId: string, // 👈 เพิ่มการรับ requestId จากหน้าบ้าน
   ) {
-    // req.user.userId มาจาก payload ของ JWT ตอน login
-    return this.authService.requestPasswordReset(req.user.id, targetUserId);
+    // ส่งทั้ง targetUserId และ requestId ไปที่ Service
+    return this.authService.requestPasswordReset(targetUserId, requestId);
   }
 
   // 2. รับ Token จาก URL และรหัสผ่านใหม่จาก Body
@@ -123,4 +123,15 @@ export class AuthController {
   ) {
     return this.authService.resetPassword(token, newPassword);
   }
+  // 3. ดึงรายการคำขอรีเซ็ตรหัสผ่านทั้งหมด (สำหรับ Admin ดูที่ Dashboard)
+  @UseGuards(AccessTokenGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @Get('admin/reset-requests')
+  async getResetRequests() {
+    return this.authService.getAllResetRequests();
+  }
+  @Post('request-reset') // ให้ User ทั่วไปเรียกได้โดยไม่ต้อง Login
+async userRequestReset(@Body('userId') userId: string) {
+  return this.authService.createUserResetRequest(userId);
+}
 }
